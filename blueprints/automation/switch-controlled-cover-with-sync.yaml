@@ -59,9 +59,9 @@ action:
           - target:
               entity_id: !input switch_entity
             action: |-
-              {% if states('cover.guest_bedroom_blinds') == 'open' %}
+              {% if states('!input cover_entity') == 'open' %}
                 switch.turn_on
-              {% elif states('cover.guest_bedroom_blinds') == 'closed' %}
+              {% elif states('!input cover_entity') == 'closed' %}
                 switch.turn_off
               {% endif %}
  
