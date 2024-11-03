@@ -17,6 +17,9 @@ blueprint:
         entity:
           domain: cover
 
+variables:
+  cover_entity_var: !input "cover_entity"
+
 # Combined automation for switch-controlled blinds with state sync
 trigger:
   # Trigger on switch changes
@@ -59,9 +62,9 @@ action:
           - target:
               entity_id: !input switch_entity
             action: |-
-              {% if states('!input cover_entity') == 'open' %}
+              {% if states(cover_entity_var) == 'open' %}
                 switch.turn_on
-              {% elif states('!input cover_entity') == 'closed' %}
+              {% elif states(cover_entity_var) == 'closed' %}
                 switch.turn_off
               {% endif %}
  
