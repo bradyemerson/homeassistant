@@ -56,7 +56,7 @@ action:
       - conditions:
           - condition: trigger
             id:
-              - homeassistant-started
+              - hass-start-up
               - blinds-state-change
         sequence:
           - target:
