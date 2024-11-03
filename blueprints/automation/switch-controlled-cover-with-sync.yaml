@@ -20,18 +20,19 @@ blueprint:
 variables:
   cover_entity_var: !input "cover_entity"
 
-# Combined automation for switch-controlled blinds with state sync
-trigger:
+triggers:
   # Trigger on switch changes
-  - platform: state
+  - trigger: state
     entity_id: !input switch_entity
     id: button-state-change
   # Trigger on blind state changes
-  - platform: state
+  - trigger: state
     entity_id: !input cover_entity
     id: blinds-state-change
+    from: null
+    to: null
   # Trigger on HA startup
-  - platform: homeassistant
+  - trigger: homeassistant
     event: start
     id: hass-start-up
 
