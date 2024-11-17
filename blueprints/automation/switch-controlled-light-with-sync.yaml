@@ -77,8 +77,11 @@ action:
                 light.turn_off
               {% endif %}
             data: >-
-              {% set data = { "brightness_pct": brightness_pct } %}
-              {% if kelvin > 0 %}
+              {% set data = {} %}
+              {% if brightness_pct and brightness_pct > 0 %}
+                {% set data = data | combine({"brightness_pct": brightness_pct}) %}
+              {% endif %}
+              {% if kelvin and kelvin > 0 %}
                 {% set data = data | combine({"kelvin": kelvin}) %}
               {% endif %}
               {% if rgb_color and rgb_color is sequence and rgb_color | length == 3 %}
