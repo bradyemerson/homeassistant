@@ -16,6 +16,30 @@ blueprint:
       selector:
         entity:
           domain: light
+    brightness_pct:
+      name: Brightness
+      description: Brightness percentage to set when the light is turned on
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: "%"
+    kelvin:
+      name: Color Temperature
+      description: Color temperature in Kelvin (optional)
+      default: 0
+      selector:
+        color_temp:
+          unit: kelvin
+          min: 0
+          max: 6500
+    rgb_color:
+      name: RGB Color
+      description: RGB color values (optional)
+      default: []
+      selector:
+        color_rgb:
 
 variables:
   light_entity_var: !input "light_entity"
@@ -52,8 +76,17 @@ action:
               {% else %}
                 light.turn_off
               {% endif %}
+            data: >-
+              {% set data = { "brightness_pct": brightness_pct } %}
+              {% if kelvin > 0 %}
+                {% set data = data | combine({"kelvin": kelvin}) %}
+              {% endif %}
+              {% if rgb_color and rgb_color is sequence and rgb_color | length == 3 %}
+                {% set data = data | combine({"rgb_color": rgb_color}) %}
+              {% endif %}
+              {{ data }}
       
-      # Handle blind state changes and HA startup
+      # Handle light state changes and HA startup
       - conditions:
           - condition: trigger
             id:
@@ -68,4 +101,3 @@ action:
               {% elif states(light_entity_var) == 'off' %}
                 switch.turn_off
               {% endif %}
- 
