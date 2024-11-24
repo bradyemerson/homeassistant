@@ -1,0 +1,96 @@
+blueprint:
+  name: Switch Controlled Fan with State Sync
+  description: Controls a fan with a switch while maintaining state synchronization between them.
+  domain: automation
+  source_url: https://github.com/bradyemerson/homeassistant/blob/main/blueprints/automation/switch-controlled-fan-with-sync.yaml
+  input:
+    switch_entity:
+      name: Control Switch
+      description: The switch that will control the cover
+      selector:
+        entity:
+          domain: switch
+    fan_entity:
+      name: Fan
+      description: The fan to be controlled
+      selector:
+        entity:
+          domain: fan
+    percentage:
+      name: percentage
+      description: Percentage (speed) to set when the fan is turned on
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: "%"
+#    preset_mode:
+#      name: Color Temperature
+#      description: Color temperature in Kelvin (optional)
+#      default: 0
+#      selector:
+#        color_temp:
+#          unit: kelvin
+#          min: 0
+#          max: 6500
+
+variables:
+  fan_entity_var: !input "fan_entity"
+
+triggers:
+  # Trigger on switch changes
+  - trigger: state
+    entity_id: !input switch_entity
+    id: button-state-change
+  # Trigger on blind state changes
+  - trigger: state
+    entity_id: !input fan_entity
+    id: fan-state-change
+    from: null
+    to: null
+  # Trigger on HA startup
+  - trigger: homeassistant
+    event: start
+    id: hass-start-up
+
+action:
+  - choose:
+      # Handle switch state changes
+      - conditions:
+          - condition: trigger
+            id:
+              - button-state-change
+        sequence:
+          - target:
+              entity_id: !input fan_entity
+            action: |-
+              {% if trigger.to_state.state == 'on' %}
+                fan.turn_on
+              {% else %}
+                fan.turn_off
+              {% endif %}
+            data: >-
+              {% set data = {} %}
+              {% if trigger.to_state.state == 'on' %}
+                {% if percentage and percentage > 0 %}
+                  {% set data = data | combine({"percentage": percentage}) %}
+                {% endif %}
+              {% endif %}
+              {{ data }}
+      
+      # Handle fan state changes and HA startup
+      - conditions:
+          - condition: trigger
+            id:
+              - hass-start-up
+              - fan-state-change
+        sequence:
+          - target:
+              entity_id: !input switch_entity
+            action: |-
+              {% if states(fan_entity_var) == 'on' %}
+                switch.turn_on
+              {% elif states(fan_entity_var) == 'off' %}
+                switch.turn_off
+              {% endif %}
