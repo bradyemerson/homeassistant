@@ -31,6 +31,10 @@ blueprint:
       name: MQTT Topic (Advanced)
       description: The MQTT topic Frigate sends review messages in.
       default: frigate/reviews
+    client_id:
+      name: Client ID (Optional-Advanced)
+      description: Used to support multiple instances of Frigate. Leave blank if you don't know what to do.
+      default: ""
     filters:
       name: |
         # Filters
@@ -309,7 +313,6 @@ variables:
   input_severity: !input review_severity
   severity: "{{trigger.payload_json['after']['severity'] if trigger.id == 'frigate-event'}}"
   type: "{{trigger.payload_json['type'] if trigger.id == 'frigate-event'}}"
-  update_sub_label: !input update_sub_label
   input_client_id: !input client_id
   client_id: "{{input_client_id if not input_client_id else '/' + input_client_id if '/' not in input_client_id else input_client_id }}"
   final_update: true
@@ -334,7 +337,6 @@ variables:
   input_states: !input state_filter_states
   states_filter: "{{ input_states | list | lower }}"
   custom_filter: !input custom_filter
-  sticky: !input sticky
   debug: !input debug
   redacted: !input redacted
   master_condition: !input master_condition
@@ -386,11 +388,6 @@ actions:
           - action: automation.turn_on
             target:
               entity_id: "{{ this.entity_id }}"
-      - alias: "Custom Action Manual"
-        conditions:
-          - condition: trigger
-            id: custom
-        sequence: !input "custom_action_manual"
       - alias: "Frigate Event"
         conditions:
           - condition: trigger
@@ -404,28 +401,7 @@ actions:
               objects: "{{ event['after']['data']['objects'] }}"
               sub_labels: "{{ event['after']['data']['sub_labels'] }}"
               label: >-
-                {% if update_sub_label %}
-                  {% set data = namespace(labels=[]) %} 
-                  {% if labels|length %}
-                    {% for obj in objects|select('in', labels) %}
-                      {% if "-verified" in obj %}
-                      {% else %}
-                        {% set data.labels = data.labels + [obj] %}
-                      {% endif %}
-                    {% endfor %} {% set data.labels = data.labels + sub_labels %} 
-                    {{ data.labels | unique | list | sort | join(", ") | title }}
-                  {% else %}
-                    {% for obj in objects %}
-                      {% if "-verified" in obj %}
-                      {% else %}
-                        {% set data.labels = data.labels + [obj] %}
-                      {% endif %}
-                    {% endfor %} {% set data.labels = data.labels + sub_labels %} 
-                    {{ data.labels | unique | list | sort | join(", ") | title }}
-                  {% endif %}
-                {% else %}
-                  {{ objects | list | join(", ") | title }}
-                {% endif %}
+                {{ objects | list | join(", ") | title }}
 
               # Dynamic Variables per event
               # after_zones: "{{ event['after']['data']['zones'] }}"
@@ -471,9 +447,7 @@ actions:
                             Sub Labels: {{sub_labels | join(', ')}}
                           Config: 
                             Camera(formatted): {{camera}}({{camera_name}}),
-                            Critical: {{critical}}, 
-                            TTS: {{tts}} 
-                            TTS Helper: {{tts_helper if tts else 'N/A'}},
+                            Critical: {{critical}},
                             Final_Update (delay): {{final_update}} ({{final_delay}})s, 
                             Cooldown: {{cooldown}}s, 
                             Initial Delay: {{initial_delay}}s, 
@@ -538,16 +512,6 @@ actions:
                           entity_id: !input "light"
                         data:
                           brightness_pct: 80
-                      - if: "{{tts and (not tts_helper or (tts_helper and id not in states(tts_helper)))}}"
-                        then:
-                          sequence:
-                            - action: input_text.set_value
-                              data:
-                                value: |
-                                  {% set newIds = id + '|' + states(tts_helper) %}
-                                  {{ newIds[:250] }}
-                              target:
-                                entity_id: "{{tts_helper}}"
           ########################################################
           #################### LOOP for updates ##################
           ########################################################
@@ -623,32 +587,8 @@ actions:
                     # If the user has configured specific objects we eliminate objects not in that list
                     # Otherwise we loop through all objects and replace any verified objects with the sub label
                     label: >-
-                      {% if update_sub_label %}
-                        {% set data = namespace(labels=[]) %} 
-                        {% if labels|length %}
-                          {% for obj in objects|select('in', labels) %}
-                            {% if "-verified" in obj %}
-                            {% else %}
-                              {% set data.labels = data.labels + [obj] %}
-                            {% endif %}
-                          {% endfor %} {% set data.labels = data.labels + sub_labels %} 
-                          {{ data.labels | unique | list | sort | join(", ") | title }}
-                        {% else %}
-                          {% for obj in objects %}
-                            {% if "-verified" in obj %}
-                            {% else %}
-                              {% set data.labels = data.labels + [obj] %}
-                            {% endif %}
-                          {% endfor %} {% set data.labels = data.labels + sub_labels %} 
-                          {{ data.labels | unique | list | sort | join(", ") | title }}
-                        {% endif %}
-                      {% else %}
-                        {{objects | list | join(', ') | title}}
-                      {% endif %}
-                    # import the title and message again so any sublabel, object or zone changes are captured.
-                    tts: !input tts
+                      {{objects | list | join(', ') | title}}
 
-                    sub_label_updated: "{{ update_sub_label and sub_labels != before_sub_labels }}"
                     # If we are filtering based on zones, and zone conditions are met and there is a new zone added.
                     zone_updated: "{{ (entered_new_filter_zones and zones_satisfied) or entered_new_zones }}"
                     object_updated: "{{ old_objects | select('in', labels) | list | length  != objects | select('in', labels) | list | length }}"
@@ -663,14 +603,13 @@ actions:
                             name: Frigate Notification
                             message: |
                               DEBUG (in loop):
-                                Send Notification: {{custom_filter and not home and zones_satisfied and state_satisfied and objects_satisfied and severity_satisfied and ((final_update and type == 'end') or (severity_updated or presence_changed or zone_updated or object_updated or sub_label_updated)) }}
+                                Send Notification: {{custom_filter and not home and zones_satisfied and state_satisfied and objects_satisfied and severity_satisfied and ((final_update and type == 'end') or (severity_updated or presence_changed or zone_updated or object_updated)) }}
                                 Triggers:
                                   New Snapshot: False (not functional with reviews)
                                   Severity Changed: {{severity_updated}},
                                   Presence Changed: {{presence_changed}},
                                   Object changed: {{object_updated}},
                                   Zones Changed: {{'True' if entered_new_filter_zones and zones_satisfied else 'True - zone filter disabled' if entered_new_zones and not zone_only else 'True - Filter Criteria not met' if entered_new_zones else 'False'}},
-                                  Sublabel changed: {{ sub_label_updated }}{{' - Disabled' if not update_sub_label}},
                                   Final Update: {{final_update and type == 'end'}}
                                 Conditions:
                                   Filters:
@@ -728,9 +667,6 @@ actions:
                                 - alias: Zone Changed
                                   condition: template
                                   value_template: "{{zone_updated}}"
-                                - alias: Sub Label Changed
-                                  condition: template
-                                  value_template: "{{sub_label_updated}}"
                                 - alias: Object Changed
                                   condition: template
                                   value_template: "{{object_updated}}"
@@ -760,14 +696,4 @@ actions:
                                 skip_condition: true
                               target:
                                 entity_id: automation.turn_on_front_porch_at_sun_set
-                            - if: "{{tts and (not tts_helper or (tts_helper and id not in states(tts_helper)))}}"
-                              then:
-                                sequence:
-                                  - action: input_text.set_value
-                                    data:
-                                      value: |
-                                        {% set newIds = id + '|' + states(tts_helper) %}
-                                        {{ newIds[:250] }}
-                                    target:
-                                      entity_id: "{{tts_helper}}"
               until: "{{ not wait.trigger or wait.trigger.payload_json['type'] == 'end' }}"
