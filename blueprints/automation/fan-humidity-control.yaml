@@ -1,0 +1,120 @@
+blueprint:
+  name: Fan - Humidity Control
+  description: Automatically control a fan based on humidity difference between room and reference sensor
+  domain: automation
+  input:
+    bathroom_humidity_sensor:
+      name: Bathroom Humidity Sensor
+      description: Humidity sensor in the bathroom
+      selector:
+        entity:
+          domain: sensor
+          device_class: humidity
+    reference_humidity_sensor:
+      name: Reference Humidity Sensor
+      description: Humidity sensor in another room (e.g., hallway) for comparison
+      selector:
+        entity:
+          domain: sensor
+          device_class: humidity
+    bathroom_fan:
+      name: Bathroom Fan
+      description: The fan or switch to control
+      selector:
+        entity:
+          domain:
+            - fan
+            - switch
+    humidity_threshold:
+      name: Humidity Threshold
+      description: Turn on fan when bathroom humidity exceeds reference by this percentage
+      default: 10
+      selector:
+        number:
+          min: 5
+          max: 30
+          step: 1
+          unit_of_measurement: "%"
+          mode: slider
+    humidity_drop_threshold:
+      name: Humidity Drop Threshold
+      description: Turn off fan when bathroom humidity drops to within this percentage of reference
+      default: 5
+      selector:
+        number:
+          min: 2
+          max: 15
+          step: 1
+          unit_of_measurement: "%"
+          mode: slider
+    trigger_delay:
+      name: Trigger Delay
+      description: How long humidity must be elevated before turning on fan
+      default: 60
+      selector:
+        number:
+          min: 0
+          max: 300
+          step: 15
+          unit_of_measurement: seconds
+          mode: slider
+    max_runtime:
+      name: Maximum Runtime
+      description: Maximum time fan will run before automatically turning off
+      default: 60
+      selector:
+        number:
+          min: 15
+          max: 180
+          step: 5
+          unit_of_measurement: minutes
+          mode: slider
+    extra_runtime:
+      name: Extra Runtime
+      description: Additional time to run fan after humidity normalizes
+      default: 300
+      selector:
+        number:
+          min: 60
+          max: 900
+          step: 30
+          unit_of_measurement: seconds
+          mode: slider
+
+trigger:
+  - platform: template
+    value_template: >
+      {{ (states(bathroom_humidity_sensor) | float(0) - 
+          states(reference_humidity_sensor) | float(0)) > humidity_threshold }}
+    for:
+      seconds: !input trigger_delay
+
+condition:
+  - condition: template
+    value_template: >
+      {{ (states(bathroom_humidity_sensor) | float(0) - 
+          states(reference_humidity_sensor) | float(0)) > humidity_threshold }}
+
+action:
+  - service: homeassistant.turn_on
+    target:
+      entity_id: !input bathroom_fan
+  - wait_for_trigger:
+      - platform: template
+        value_template: >
+          {{ (states(bathroom_humidity_sensor) | float(0) - 
+              states(reference_humidity_sensor) | float(0)) <= humidity_drop_threshold }}
+    timeout:
+      minutes: !input max_runtime
+  - delay:
+      seconds: !input extra_runtime
+  - service: homeassistant.turn_off
+    target:
+      entity_id: !input bathroom_fan
+
+mode: single
+variables:
+  bathroom_humidity_sensor: !input bathroom_humidity_sensor
+  reference_humidity_sensor: !input reference_humidity_sensor
+  humidity_threshold: !input humidity_threshold
+  humidity_drop_threshold: !input humidity_drop_threshold
