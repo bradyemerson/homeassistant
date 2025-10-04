@@ -1,6 +1,7 @@
 blueprint:
   name: Fan - Humidity Control
   description: Automatically control a fan based on humidity difference between room and reference sensor
+  source_url: https://github.com/bradyemerson/homeassistant/blob/main/blueprints/automation/fan-humidity-control.yaml
   domain: automation
   input:
     bathroom_humidity_sensor:
