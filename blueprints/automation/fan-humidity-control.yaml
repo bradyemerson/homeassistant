@@ -89,31 +89,52 @@ trigger:
           states(reference_humidity_sensor) | float(0)) > humidity_threshold }}
     for:
       seconds: !input trigger_delay
+    id: humidity
+  - platform: state
+    entity_id: !input bathroom_fan
+    to: 'on'
+    id: manual
 
-condition:
-  - condition: template
-    value_template: >
-      {{ (states(bathroom_humidity_sensor) | float(0) - 
-          states(reference_humidity_sensor) | float(0)) > humidity_threshold }}
+condition: []
 
 action:
-  - service: homeassistant.turn_on
-    target:
-      entity_id: !input bathroom_fan
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: humidity
+        sequence:
+          - service: homeassistant.turn_on
+            target:
+              entity_id: !input bathroom_fan
   - wait_for_trigger:
       - platform: template
         value_template: >
           {{ (states(bathroom_humidity_sensor) | float(0) - 
               states(reference_humidity_sensor) | float(0)) <= humidity_drop_threshold }}
+      - platform: state
+        entity_id: !input bathroom_fan
+        to: 'off'
     timeout:
       minutes: !input max_runtime
-  - delay:
-      seconds: !input extra_runtime
-  - service: homeassistant.turn_off
-    target:
-      entity_id: !input bathroom_fan
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ wait.trigger is none }}"
+        sequence:
+          - service: homeassistant.turn_off
+            target:
+              entity_id: !input bathroom_fan
+      - conditions:
+          - condition: template
+            value_template: "{{ wait.trigger.platform == 'template' }}"
+        sequence:
+          - delay:
+              seconds: !input extra_runtime
+          - service: homeassistant.turn_off
+            target:
+              entity_id: !input bathroom_fan
 
-mode: single
+mode: restart
 variables:
   bathroom_humidity_sensor: !input bathroom_humidity_sensor
   reference_humidity_sensor: !input reference_humidity_sensor
