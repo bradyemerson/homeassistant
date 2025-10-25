@@ -22,18 +22,30 @@ blueprint:
           domain: switch
           multiple: true
 
-mode: single
+mode: restart
+max_exceeded: silent
 
 triggers:
   # Trigger when target device changes state
   - platform: state
     entity_id: !input target_device
     id: target_device
+    to:
+      - "on"
+      - "off"
   
   # Trigger when any sync switch changes state
   - platform: state
     entity_id: !input sync_switches
     id: sync_switch
+    to:
+      - "on"
+      - "off"
+
+conditions:
+  # Only run if the state actually changed (not just attribute updates)
+  - condition: template
+    value_template: "{{ trigger.from_state.state != trigger.to_state.state }}"
 
 actions:
   - choose:
