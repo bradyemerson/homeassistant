@@ -61,9 +61,8 @@ actions:
             id: sync_switch
         sequence:
           - if:
-              - condition: state
-                entity_id: "{{ trigger.entity_id }}"
-                state: "on"
+              - condition: template
+                value_template: "{{ trigger.to_state.state == 'on' }}"
             then:
               - action: homeassistant.turn_on
                 target:
