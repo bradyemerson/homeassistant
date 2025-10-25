@@ -1,6 +1,7 @@
 blueprint:
   name: Multi-Switch Synchronization
   description: Synchronize multiple switches with a light, switch, or fan. When any device changes state, all others will match.
+  source_url: https://github.com/bradyemerson/homeassistant/blob/main/blueprints/automation/multi-switch-synchronization.yaml
   domain: automation
   input:
     target_device:
