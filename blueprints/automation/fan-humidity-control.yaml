@@ -132,7 +132,8 @@ action:
             target:
               entity_id: !input bathroom_fan
 
-mode: restart
+mode: single
+max_exceeded: silent
 variables:
   bathroom_sensor: !input bathroom_humidity_sensor
   reference_sensor: !input reference_humidity_sensor
