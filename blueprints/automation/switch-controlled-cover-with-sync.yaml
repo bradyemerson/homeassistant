@@ -17,6 +17,7 @@ blueprint:
         entity:
           domain: cover
 
+mode: restart
 variables:
   cover_entity_var: !input "cover_entity"
 
