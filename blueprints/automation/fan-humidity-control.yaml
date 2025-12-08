@@ -48,6 +48,17 @@ blueprint:
           step: 1
           unit_of_measurement: "%"
           mode: slider
+    humidity_floor:
+      name: Humidity Floor
+      description: Minimum humidity level required to turn on fan
+      default: 50
+      selector:
+        number:
+          min: 30
+          max: 80
+          step: 5
+          unit_of_measurement: "%"
+          mode: slider
     trigger_delay:
       name: Trigger Delay
       description: How long humidity must be elevated before turning on fan
@@ -70,17 +81,6 @@ blueprint:
           step: 5
           unit_of_measurement: minutes
           mode: slider
-    extra_runtime:
-      name: Extra Runtime
-      description: Additional time to run fan after humidity normalizes
-      default: 300
-      selector:
-        number:
-          min: 60
-          max: 900
-          step: 30
-          unit_of_measurement: seconds
-          mode: slider
 
 trigger:
   - platform: state
@@ -101,6 +101,9 @@ action:
           - condition: template
             value_template: >
               {{ (states(bathroom_sensor) | float(0) - states(reference_sensor) | float(0)) > threshold }}
+          - condition: template
+            value_template: >
+              {{ states(bathroom_sensor) | float(0) >= humidity_floor }}
         sequence:
           - service: homeassistant.turn_on
             target:
@@ -126,8 +129,6 @@ action:
           - condition: template
             value_template: "{{ wait.trigger.platform == 'template' }}"
         sequence:
-          - delay:
-              seconds: !input extra_runtime
           - service: homeassistant.turn_off
             target:
               entity_id: !input bathroom_fan
@@ -139,3 +140,4 @@ variables:
   reference_sensor: !input reference_humidity_sensor
   threshold: !input humidity_threshold
   drop_threshold: !input humidity_drop_threshold
+  humidity_floor: !input humidity_floor
