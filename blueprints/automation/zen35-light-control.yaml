@@ -1,0 +1,324 @@
+blueprint:
+  name: ZEN35 Scene Dimmer – Light Control with LED Sync
+  description: >
+    Control a dimmable light using a Zooz ZEN35 scene button via Central Scene
+    (Z-Wave JS). Single tap toggles, double tap sets full brightness, hold ramps
+    brightness up continuously. A companion automation keeps the button LED in
+    sync with the light's state from any source.
+
+    Prerequisites:
+      • ZEN35 must be included via Z-Wave JS integration.
+      • Set Parameter 38 = 1 (disable LED flash on setting changes).
+      • Set Parameter 39 = 1 (disable LED flash on button press).
+      • Set the target button's LED Mode parameter to 3 (always on) so HA owns
+        the LED state. LED Mode params: Button 1 = 2, Button 2 = 3,
+        Button 3 = 4, Button 4 = 5, Main dimmer = 1.
+
+  domain: automation
+  input:
+    zen35_node_id:
+      name: ZEN35 Node ID
+      description: >
+        The Z-Wave node ID of your ZEN35. Find it under
+        Settings → Devices & Services → Z-Wave JS → your ZEN35 device.
+      selector:
+        number:
+          min: 1
+          max: 232
+          mode: box
+
+    zen35_device_id:
+      name: ZEN35 Device
+      description: >
+        Select your ZEN35 device. Used to send LED parameter updates.
+      selector:
+        device:
+          integration: zwave_js
+
+    button_scene_label:
+      name: Button
+      description: Which scene button on the ZEN35 should control the light?
+      default: "Scene 001"
+      selector:
+        select:
+          options:
+            - label: "Button 1 (top left)"
+              value: "Scene 001"
+            - label: "Button 2 (top right)"
+              value: "Scene 002"
+            - label: "Button 3 (bottom left)"
+              value: "Scene 003"
+            - label: "Button 4 (bottom right)"
+              value: "Scene 004"
+            - label: "Main dimmer button"
+              value: "Scene 005"
+
+    led_brightness_parameter:
+      name: LED Brightness Parameter
+      description: >
+        The parameter number that controls the chosen button's LED brightness.
+        Button 1 = 12, Button 2 = 13, Button 3 = 14, Button 4 = 15,
+        Main dimmer = 11.
+      default: "12"
+      selector:
+        select:
+          options:
+            - label: "Button 1 (param 12)"
+              value: "12"
+            - label: "Button 2 (param 13)"
+              value: "13"
+            - label: "Button 3 (param 14)"
+              value: "14"
+            - label: "Button 4 (param 15)"
+              value: "15"
+            - label: "Main dimmer (param 11)"
+              value: "11"
+
+    target_light:
+      name: Light to Control
+      description: The light entity this button will control.
+      selector:
+        entity:
+          domain: light
+
+    brightness_step:
+      name: Hold Dimming Step (%)
+      description: >
+        How much to increase brightness per loop tick while the button is held.
+        Lower values = smoother but slower ramp. Higher = faster but choppier.
+        Recommended: 5–15.
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 25
+          step: 1
+          unit_of_measurement: "%"
+
+    dimming_delay_ms:
+      name: Hold Dimming Interval (ms)
+      description: >
+        Milliseconds between each brightness increment while held.
+        Lower values = faster ramp. Recommended: 200–400.
+      default: 300
+      selector:
+        number:
+          min: 100
+          max: 1000
+          step: 50
+          unit_of_measurement: "ms"
+
+    double_tap_brightness:
+      name: Double Tap Brightness (%)
+      description: >
+        Brightness level to jump to on a double tap. Set to 100 for full
+        brightness, or any other target level.
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+
+    led_brightness_on:
+      name: LED Brightness When Light is ON
+      description: >
+        ZEN35 LED brightness level (1–10) when the controlled light is on.
+        1 = 10%, 5 = 50%, 10 = 100%.
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 1
+
+    led_brightness_off:
+      name: LED Brightness When Light is OFF
+      description: >
+        ZEN35 LED brightness level (1–10) when the controlled light is off.
+        Set low (1–2) to give a dim "inactive" glow, or match your preference.
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 1
+
+# ─── Automation 1: Button → Light ────────────────────────────────────────────
+
+trigger:
+  - platform: event
+    event_type: zwave_js_value_notification
+    event_data:
+      node_id: !input zen35_node_id
+      label: !input button_scene_label
+
+variables:
+  light_entity: !input target_light
+  step: !input brightness_step
+  delay_ms: !input dimming_delay_ms
+  dbl_brightness: !input double_tap_brightness
+
+action:
+  - choose:
+
+      # ── Single tap: toggle ─────────────────────────────────────────────────
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.event.data.value == 'KeyPressed' }}"
+        sequence:
+          - action: light.toggle
+            target:
+              entity_id: "{{ light_entity }}"
+
+      # ── Double tap: jump to target brightness ──────────────────────────────
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.event.data.value == 'KeyPressed2x' }}"
+        sequence:
+          - action: light.turn_on
+            data:
+              brightness_pct: "{{ dbl_brightness }}"
+            target:
+              entity_id: "{{ light_entity }}"
+
+      # ── Hold: ramp brightness up continuously ─────────────────────────────
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.event.data.value == 'KeyHeldDown' }}"
+        sequence:
+          - repeat:
+              while:
+                - condition: template
+                  value_template: >
+                    {{ state_attr(light_entity, 'brightness') | int(0) < 250 }}
+              sequence:
+                - action: light.turn_on
+                  data:
+                    brightness: >
+                      {{ [((state_attr(light_entity, 'brightness') | int(0))
+                           + (step * 2.55)) | int, 255] | min }}
+                  target:
+                    entity_id: "{{ light_entity }}"
+                - delay:
+                    milliseconds: "{{ delay_ms }}"
+
+      # ── Release: no action needed — mode: restart kills the hold loop ──────
+
+mode: restart
+
+---
+# ─── Automation 2: Light State → LED Sync ────────────────────────────────────
+#
+# Add this as a SECOND automation in HA. It watches the light entity for any
+# state change (from any source) and updates the ZEN35 LED brightness to match.
+#
+# To use: copy this second block into a new automation, filling in the same
+# ZEN35 device ID, LED brightness parameter, and light entity as above.
+#
+# alias: ZEN35 LED Sync – <your light name>
+
+blueprint:
+  name: ZEN35 Scene Dimmer – LED State Sync
+  description: >
+    Companion to "ZEN35 Scene Dimmer – Light Control with LED Sync".
+    Watches the controlled light for state changes from any source and updates
+    the corresponding ZEN35 button LED brightness to match.
+
+    Run this alongside the main blueprint — one instance per button/light pair.
+
+  domain: automation
+  input:
+    zen35_device_id:
+      name: ZEN35 Device
+      description: Select your ZEN35 device.
+      selector:
+        device:
+          integration: zwave_js
+
+    led_brightness_parameter:
+      name: LED Brightness Parameter
+      description: >
+        Must match the value used in the main blueprint.
+        Button 1 = 12, Button 2 = 13, Button 3 = 14, Button 4 = 15,
+        Main dimmer = 11.
+      default: "12"
+      selector:
+        select:
+          options:
+            - label: "Button 1 (param 12)"
+              value: "12"
+            - label: "Button 2 (param 13)"
+              value: "13"
+            - label: "Button 3 (param 14)"
+              value: "14"
+            - label: "Button 4 (param 15)"
+              value: "15"
+            - label: "Main dimmer (param 11)"
+              value: "11"
+
+    target_light:
+      name: Light to Watch
+      description: Must match the light used in the main blueprint.
+      selector:
+        entity:
+          domain: light
+
+    led_brightness_on:
+      name: LED Brightness When Light is ON
+      description: ZEN35 LED brightness level (1–10) when the light is on.
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 1
+
+    led_brightness_off:
+      name: LED Brightness When Light is OFF
+      description: ZEN35 LED brightness level (1–10) when the light is off.
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 1
+
+trigger:
+  - platform: state
+    entity_id: !input target_light
+
+variables:
+  param: !input led_brightness_parameter
+  br_on: !input led_brightness_on
+  br_off: !input led_brightness_off
+
+action:
+  - choose:
+      - conditions:
+          - condition: state
+            entity_id: !input target_light
+            state: "on"
+        sequence:
+          - action: zwave_js.set_config_parameter
+            data:
+              parameter: "{{ param }}"
+              value: "{{ br_on }}"
+            target:
+              device_id: !input zen35_device_id
+
+      - conditions:
+          - condition: state
+            entity_id: !input target_light
+            state: "off"
+        sequence:
+          - action: zwave_js.set_config_parameter
+            data:
+              parameter: "{{ param }}"
+              value: "{{ br_off }}"
+            target:
+              device_id: !input zen35_device_id
+
+mode: queued
+max: 5
